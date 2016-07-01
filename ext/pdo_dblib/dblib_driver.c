@@ -277,13 +277,20 @@ char *dblib_handle_last_id(pdo_dbh_t *dbh, const char *name, size_t *len)
 
 static int dblib_set_attr(pdo_dbh_t *dbh, zend_long attr, zval *val)
 {
+	zend_long lval = zval_get_long(val);
+	zend_bool bval = lval ? 1 : 0;
+
 	switch(attr) {
 		case PDO_ATTR_TIMEOUT:
 			return 0;
+
+		case PDO_DBLIB_ATTR_RAW_DATETIME:
+			((pdo_dblib_db_handle *)dbh->driver_data)->raw_datetime = bval;
+			return 1;
+
 		default:
 			return 1;
 	}
-
 }
 
 static int dblib_get_attribute(pdo_dbh_t *dbh, zend_long attr, zval *return_value)
@@ -347,10 +354,13 @@ static int pdo_dblib_handle_factory(pdo_dbh_t *dbh, zval *driver_options)
 	
 	php_pdo_parse_data_source(dbh->data_source, dbh->data_source_len, vars, nvars);
 
+	zend_long raw_datetime = 0;
+
 	if (driver_options) {
 		int connect_timeout = pdo_attr_lval(driver_options, PDO_DBLIB_ATTR_CONNECTION_TIMEOUT, -1);
 		int query_timeout = pdo_attr_lval(driver_options, PDO_DBLIB_ATTR_QUERY_TIMEOUT, -1);
 		int timeout = pdo_attr_lval(driver_options, PDO_ATTR_TIMEOUT, 30);
+		raw_datetime = pdo_attr_lval(driver_options, PDO_DBLIB_ATTR_RAW_DATETIME, 0);
 
 		if (connect_timeout == -1) {
 			connect_timeout = timeout;
@@ -366,6 +376,7 @@ static int pdo_dblib_handle_factory(pdo_dbh_t *dbh, zval *driver_options)
 	H = pecalloc(1, sizeof(*H), dbh->is_persistent);
 	H->login = dblogin();
 	H->err.sqlstate = dbh->error_code;
+	H->raw_datetime = raw_datetime;
 
 	if (!H->login) {
 		goto cleanup;

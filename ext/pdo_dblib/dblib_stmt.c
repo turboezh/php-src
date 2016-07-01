@@ -247,6 +247,24 @@ static int pdo_dblib_stmt_describe(pdo_stmt_t *stmt, int colno)
 	return 1;
 }
 
+static zval* pdo_dblib_default_column_convert(int column_type, char *data, unsigned int data_len)
+{
+	zval* zv = NULL;
+
+	if (dbwillconvert(column_type, SQLCHAR)) {
+		unsigned int tmp_data_len = 32 + (2 * (data_len)); /* FIXME: We allocate more than we need here */
+		char *tmp_data = emalloc(tmp_data_len);
+		data_len = dbconvert(NULL, column_type, data, data_len, SQLCHAR, tmp_data, -1);
+
+		zv = emalloc(sizeof(zval));
+		ZVAL_STRING(zv, tmp_data);
+
+		efree(tmp_data);
+	}
+
+	return zv;
+}
+
 static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, char **ptr,
 	 zend_ulong *len, int *caller_frees)
 {
@@ -325,26 +343,31 @@ static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, char **ptr,
 				}
 				case SQLDATETIME:
 				case SQLDATETIM4: {
-					int dl;
-					DBDATEREC di;
-					DBDATEREC dt;
+					if (H->raw_datetime) {
+						zv = pdo_dblib_default_column_convert(coltype, data, data_len);
 
-					dbconvert(H->link, coltype, data, -1, SQLDATETIME, (LPBYTE) &dt, -1);
-					dbdatecrack(H->link, &di, (DBDATETIME *) &dt);
+					} else {
+						int dl;
+						DBDATEREC di;
+						DBDATEREC dt;
 
-					dl = spprintf(&tmp_data, 20, "%d-%02d-%02d %02d:%02d:%02d",
+						dbconvert(H->link, coltype, data, -1, SQLDATETIME, (LPBYTE) &dt, -1);
+						dbdatecrack(H->link, &di, (DBDATETIME *) &dt);
+
+						dl = spprintf(&tmp_data, 20, "%d-%02d-%02d %02d:%02d:%02d",
 #if defined(PHP_DBLIB_IS_MSSQL) || defined(MSDBLIB)
-							di.year,     di.month,       di.day,        di.hour,     di.minute,     di.second
+								di.year,     di.month,       di.day,        di.hour,     di.minute,     di.second
 #else
-							di.dateyear, di.datemonth+1, di.datedmonth, di.datehour, di.dateminute, di.datesecond
+									  di.dateyear, di.datemonth + 1, di.datedmonth, di.datehour, di.dateminute,
+									  di.datesecond
 #endif
-					);
+						);
 
-					zv = emalloc(sizeof(zval));
-					ZVAL_STRINGL(zv, tmp_data, dl);
+						zv = emalloc(sizeof(zval));
+						ZVAL_STRINGL(zv, tmp_data, dl);
 
-					efree(tmp_data);
-
+						efree(tmp_data);
+					}
 					break;
 				}
 				case SQLFLT4: {
@@ -403,20 +426,10 @@ static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, char **ptr,
 
 					break;
 				}
-				default: {
-					if (dbwillconvert(coltype, SQLCHAR)) {
-						tmp_data_len = 32 + (2 * (data_len)); /* FIXME: We allocate more than we need here */
-						tmp_data = emalloc(tmp_data_len);
-						data_len = dbconvert(NULL, coltype, data, data_len, SQLCHAR, tmp_data, -1);
 
-						zv = emalloc(sizeof(zval));
-						ZVAL_STRING(zv, tmp_data);
-
-						efree(tmp_data);
-					}
-
+				default:
+					zv = pdo_dblib_default_column_convert(coltype, data, data_len);
 					break;
-				}
 			}
 		}
 	}

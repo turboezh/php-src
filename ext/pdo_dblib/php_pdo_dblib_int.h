@@ -111,6 +111,7 @@ typedef struct {
 typedef struct {
 	LOGINREC	*login;
 	DBPROCESS	*link;
+	zend_long   raw_datetime;
 
 	pdo_dblib_err err;
 } pdo_dblib_db_handle;
@@ -142,7 +143,8 @@ ZEND_EXTERN_MODULE_GLOBALS(dblib)
 
 enum {
 	PDO_DBLIB_ATTR_CONNECTION_TIMEOUT = PDO_ATTR_DRIVER_SPECIFIC,
-	PDO_DBLIB_ATTR_QUERY_TIMEOUT
+	PDO_DBLIB_ATTR_QUERY_TIMEOUT,
+	PDO_DBLIB_ATTR_RAW_DATETIME,
 };
 
 #endif
